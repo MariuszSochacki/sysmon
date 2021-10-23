@@ -19,8 +19,7 @@ func main() {
 		signal.Notify(sig, os.Interrupt, os.Kill)
 		<-sig
 		if err := dm.Stop(); err != nil {
-			log.Printf("Failed to stop the DisplayMonitor")
-			os.Exit(1)
+			log.Fatalf("Failed to stop the DisplayMonitor: %v", err)
 		}
 	}()
 

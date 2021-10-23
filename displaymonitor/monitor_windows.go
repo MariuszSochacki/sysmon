@@ -46,7 +46,7 @@ func New() DisplayMonitor {
 	}
 }
 
-func (dm *displayMonitor) Start() error {
+func (dm *displayMonitor) Start(notifySession bool) error {
 	go func() {
 		runtime.LockOSThread()
 		var moduleHandle windows.Handle
@@ -68,10 +68,12 @@ func (dm *displayMonitor) Start() error {
 		}
 		dm.windowHandle = windowHandle
 
-		wtsRegisterSessionNotification(windowHandle, NOTIFY_FOR_ALL_SESSIONS)
-		if err != nil {
-			dm.events <- fmt.Errorf("failed to register for sessions change notifications: %v", err)
-			return
+		if notifySession {
+			wtsRegisterSessionNotification(windowHandle, NOTIFY_FOR_ALL_SESSIONS)
+			if err != nil {
+				dm.events <- fmt.Errorf("failed to register for sessions change notifications: %v", err)
+				return
+			}
 		}
 		getMessageLoop(windowHandle)
 		destroyWindow(windowHandle)

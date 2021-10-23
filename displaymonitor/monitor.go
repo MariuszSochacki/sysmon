@@ -15,3 +15,4 @@ type SessionLockEvent struct {
 	Locked bool
 }
 type DisplayMonitorDone struct{}
+type DisplayMonitorError error

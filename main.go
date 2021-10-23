@@ -23,7 +23,7 @@ func main() {
 		}
 	}()
 
-Loop:
+EventLoop:
 	for {
 		e, err := dm.GetEvent()
 
@@ -38,7 +38,10 @@ Loop:
 			log.Printf("session ID: %d\tchange: %t", v.ID, v.Locked)
 		case displaymonitor.DisplayMonitorDone:
 			log.Printf("DisplayMonitor finished")
-			break Loop
+			break EventLoop
+		case displaymonitor.DisplayMonitorError:
+			log.Fatalf("Received error event: %v", v)
 		}
 	}
+
 }

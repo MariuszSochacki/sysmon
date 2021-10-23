@@ -2,6 +2,8 @@ package main
 
 import (
 	"log"
+	"os"
+	"os/signal"
 	"sysmon/displaymonitor"
 )
 
@@ -11,6 +13,16 @@ func main() {
 	if err := dm.Start(); err != nil {
 		log.Fatalf("Could not start display monitor: %v", err)
 	}
+
+	go func() {
+		sig := make(chan os.Signal, 1)
+		signal.Notify(sig, os.Interrupt, os.Kill)
+		<-sig
+		if err := dm.Stop(); err != nil {
+			log.Printf("Failed to stop the DisplayMonitor")
+			os.Exit(1)
+		}
+	}()
 
 Loop:
 	for {

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"log"
 	"os"
 	"os/signal"
@@ -8,9 +9,12 @@ import (
 )
 
 func main() {
+	notifySession := flag.Bool("notify", false, "If present will notify about session locks and unlocks")
+	flag.Parse()
+
 	dm := displaymonitor.New()
 
-	if err := dm.Start(); err != nil {
+	if err := dm.Start(*notifySession); err != nil {
 		log.Fatalf("Could not start display monitor: %v", err)
 	}
 

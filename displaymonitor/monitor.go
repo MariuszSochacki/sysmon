@@ -1,7 +1,7 @@
 package displaymonitor
 
 type DisplayMonitor interface {
-	Start() error
+	Start(notifySession bool) error
 	Stop() error
 	GetEvent() (Event, error)
 }

@@ -15,6 +15,14 @@ var (
 	pDispatchMessageW = user32.NewProc("DispatchMessageW")
 	pGetMessageW      = user32.NewProc("GetMessageW")
 	pRegisterClassExW = user32.NewProc("RegisterClassExW")
+	pGetDesktopWindow = user32.NewProc("GetDesktopWindow")
+	pPostQuitMessage  = user32.NewProc("PostQuitMessage")
+	pCloseWindow      = user32.NewProc("CloseWindow")
+)
+
+var (
+	wtsapi32                        = windows.NewLazySystemDLL("Wtsapi32.dll")
+	pWTSRegisterSessionNotification = wtsapi32.NewProc("WTSRegisterSessionNotification")
 )
 
 func createWindowExW(clsName, wndName string, instance windows.Handle) (windows.Handle, error) {
@@ -27,7 +35,7 @@ func createWindowExW(clsName, wndName string, instance windows.Handle) (windows.
 		uintptr(0),
 		uintptr(0),
 		uintptr(0),
-		uintptr(0),
+		uintptr(getDesktopWindow()),
 		uintptr(0),
 		uintptr(instance),
 		uintptr(0),
@@ -71,4 +79,44 @@ func defWindowProc(hwnd windows.Handle, msg uint32, wparam, lparam uintptr) uint
 	)
 
 	return uintptr(ret)
+}
+
+func getMessage(msg *tMSG, hwnd windows.Handle, msgFilterMin, msgFilterMax uint32) (bool, error) {
+	ret, _, err := pGetMessageW.Call(
+		uintptr(unsafe.Pointer(msg)),
+		uintptr(hwnd),
+		uintptr(msgFilterMin),
+		uintptr(msgFilterMax),
+	)
+	if int32(ret) == -1 {
+		return false, err
+	}
+
+	return int32(ret) != 0, nil
+}
+
+func dispatchMessage(msg *tMSG) {
+	pDispatchMessageW.Call(uintptr(unsafe.Pointer(msg)))
+}
+
+func getDesktopWindow() windows.Handle {
+	ret, _, _ := pGetDesktopWindow.Call()
+	return windows.Handle(ret)
+}
+
+func wtsRegisterSessionNotification(hwnd windows.Handle, dwFlags uint32) error {
+	ret, _, err := pWTSRegisterSessionNotification.Call(uintptr(hwnd), uintptr(dwFlags))
+	if ret == 0 {
+		return err
+	}
+
+	return nil
+}
+
+func postQuitMessage(exitCode int32) {
+	pPostQuitMessage.Call(uintptr(exitCode))
+}
+
+func closeWindow(hwnd windows.Handle) {
+	pCloseWindow.Call(uintptr(hwnd))
 }

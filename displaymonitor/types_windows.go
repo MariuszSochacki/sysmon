@@ -18,3 +18,16 @@ type tWNDCLASSEXW struct {
 	pClassName  *uint16
 	hSmallIcon  windows.Handle
 }
+
+type tPOINT struct {
+	dwX, dwY int32
+}
+
+type tMSG struct {
+	hWnd      windows.Handle
+	dwMessage uint32
+	wParam    uintptr
+	lParam    uintptr
+	dwTime    uint32
+	tPoint    tPOINT
+}

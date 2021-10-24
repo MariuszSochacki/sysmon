@@ -1,5 +1,10 @@
 package displaymonitor
 
+// New creates a new object of a display monitor and allows using it's interface.
+func New() DisplayMonitor {
+	return newImpl()
+}
+
 // DisplayMonitor is the interface that allows controlling the display monitoring service.
 type DisplayMonitor interface {
 	// Start starts the monitoring process and blocks until Stop is called or an error occurs.

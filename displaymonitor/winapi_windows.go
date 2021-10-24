@@ -21,8 +21,9 @@ var (
 )
 
 var (
-	wtsapi32                        = windows.NewLazySystemDLL("Wtsapi32.dll")
-	pWTSRegisterSessionNotification = wtsapi32.NewProc("WTSRegisterSessionNotification")
+	wtsapi32                          = windows.NewLazySystemDLL("Wtsapi32.dll")
+	pWTSRegisterSessionNotification   = wtsapi32.NewProc("WTSRegisterSessionNotification")
+	pWTSUnregisterSessionNotification = wtsapi32.NewProc("WTSUnRegisterSessionNotification")
 )
 
 func createWindowExW(clsName, wndName string, instance windows.Handle) (windows.Handle, error) {
@@ -119,6 +120,18 @@ func wtsRegisterSessionNotification(hwnd windows.Handle, dwFlags uint32) error {
 	ret, _, err := pWTSRegisterSessionNotification.Call(
 		uintptr(hwnd),
 		uintptr(dwFlags),
+	)
+
+	if ret == 0 {
+		return err
+	}
+
+	return nil
+}
+
+func wtsUnregisterSessionNotification(hwnd windows.Handle) error {
+	ret, _, err := pWTSUnregisterSessionNotification.Call(
+		uintptr(hwnd),
 	)
 
 	if ret == 0 {

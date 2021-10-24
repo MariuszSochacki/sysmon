@@ -82,6 +82,9 @@ func (dm *displayMonitorWindows) windowProcedure(hwnd windows.Handle, msg uint32
 	case WM_CLOSE, WM_STOP_DISPLAY_MONITOR:
 		destroyWindow(dm.windowHandle)
 	case WM_DESTROY:
+		if dm.sessionLockHandler != nil {
+			wtsUnregisterSessionNotification(dm.windowHandle)
+		}
 		postQuitMessage(0)
 	case WM_DISPLAYCHANGE:
 		if dm.resolutionChangeHandler == nil {

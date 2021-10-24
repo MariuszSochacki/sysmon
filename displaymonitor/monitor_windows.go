@@ -2,7 +2,6 @@ package displaymonitor
 
 import (
 	"fmt"
-	"log"
 	"runtime"
 
 	"golang.org/x/sys/windows"
@@ -18,6 +17,9 @@ const (
 	WM_DESTROY           = 0x0002
 	WM_DISPLAYCHANGE     = 0x007e
 	WM_WTSSESSION_CHANGE = 0x02b1
+	WM_USER              = 0x0400
+
+	WM_STOP_DISPLAY_MONITOR = WM_USER
 )
 
 const (
@@ -27,116 +29,95 @@ const (
 )
 
 const (
-	eventChanSize = 10
-)
-
-const (
 	lowerWordMask  = 0xFFFF
 	upperWordShift = 16
 )
 
-type displayMonitor struct {
-	events       chan Event
+type displayMonitorWindows struct {
+	displayMonitor
 	windowHandle windows.Handle
 }
 
-func New() DisplayMonitor {
-	return &displayMonitor{
-		events: make(chan Event, eventChanSize),
-	}
+func newImpl() DisplayMonitor {
+	return &displayMonitorWindows{}
 }
 
-func (dm *displayMonitor) Start(notifySession bool) error {
-	go func() {
-		runtime.LockOSThread()
-		var moduleHandle windows.Handle
-		if err := windows.GetModuleHandleEx(0, nil, &moduleHandle); err != nil {
-			dm.events <- fmt.Errorf("failed to get module handle: %v", err)
-			return
-		}
+func (dm *displayMonitorWindows) Start() error {
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
 
-		_, err := registerClassEx(windowClassName, dm.windowProcedure, moduleHandle)
+	var moduleHandle windows.Handle
+	if err := windows.GetModuleHandleEx(0, nil, &moduleHandle); err != nil {
+		return fmt.Errorf("failed to get module handle: %v", err)
+	}
+
+	_, err := registerClassEx(windowClassName, dm.windowProcedure, moduleHandle)
+	if err != nil {
+		return fmt.Errorf("failed to register for sessions change notifications: %v", err)
+	}
+
+	windowHandle, err := createWindowExW(windowClassName, windowName, moduleHandle)
+	if err != nil {
+		return fmt.Errorf("failed to register for sessions change notifications: %v", err)
+	}
+	dm.windowHandle = windowHandle
+
+	if dm.sessionLockHandler != nil {
+		wtsRegisterSessionNotification(windowHandle, NOTIFY_FOR_ALL_SESSIONS)
 		if err != nil {
-			dm.events <- fmt.Errorf("failed to register window class: %v", err)
-			return
+			return fmt.Errorf("failed to register for sessions change notifications: %v", err)
 		}
+	}
 
-		windowHandle, err := createWindowExW(windowClassName, windowName, moduleHandle)
-		if err != nil {
-			dm.events <- fmt.Errorf("failed to create window: %v", err)
-			return
-		}
-		dm.windowHandle = windowHandle
+	return getMessageLoop()
+}
 
-		if notifySession {
-			wtsRegisterSessionNotification(windowHandle, NOTIFY_FOR_ALL_SESSIONS)
-			if err != nil {
-				dm.events <- fmt.Errorf("failed to register for sessions change notifications: %v", err)
-				return
-			}
-		}
-		getMessageLoop(windowHandle)
-		destroyWindow(windowHandle)
-		runtime.UnlockOSThread()
-	}()
-
+func (dm *displayMonitorWindows) Stop() error {
+	sendMessageW(dm.windowHandle, WM_STOP_DISPLAY_MONITOR, 0, 0)
 	return nil
 }
 
-func (dm *displayMonitor) Stop() error {
-	closeWindow(dm.windowHandle)
-	return nil
-}
-
-func (dm *displayMonitor) GetEvent() (Event, error) {
-	e, ok := <-dm.events
-	if !ok {
-		return nil, fmt.Errorf("could not read events")
-	}
-	switch e.(type) {
-	case DisplayMonitorDone:
-		close(dm.events)
-	}
-	return e, nil
-}
-
-func (dm *displayMonitor) windowProcedure(hwnd windows.Handle, msg uint32, wparam, lparam uintptr) uintptr {
+func (dm *displayMonitorWindows) windowProcedure(hwnd windows.Handle, msg uint32, wparam, lparam uintptr) uintptr {
 	switch msg {
-	case WM_CLOSE:
+	case WM_CLOSE, WM_STOP_DISPLAY_MONITOR:
 		destroyWindow(dm.windowHandle)
 	case WM_DESTROY:
-		dm.events <- DisplayMonitorDone{}
 		postQuitMessage(0)
 	case WM_DISPLAYCHANGE:
-		dm.events <- ResolutionChangeEvent{
+		if dm.resolutionChangeHandler == nil {
+			break
+		}
+		e := ResolutionChangeEvent{
 			Width:  int(lparam) & lowerWordMask,
 			Height: (int(lparam) >> upperWordShift) & lowerWordMask,
 		}
+		dm.resolutionChangeHandler(e)
 	case WM_WTSSESSION_CHANGE:
+		if dm.sessionLockHandler == nil {
+			break
+		}
 		switch wparam {
 		case WTS_SESSION_LOCK:
-			dm.events <- SessionLockEvent{ID: int(lparam), Locked: true}
+			dm.sessionLockHandler(SessionLockEvent{ID: int(lparam), Locked: true})
 		case WTS_SESSION_UNLOCK:
-			dm.events <- SessionLockEvent{ID: int(lparam), Locked: false}
+			dm.sessionLockHandler(SessionLockEvent{ID: int(lparam), Locked: false})
 		}
-
 	}
+
 	return defWindowProc(hwnd, msg, wparam, lparam)
 }
 
-func getMessageLoop(windowHandle windows.Handle) {
+func getMessageLoop() error {
 	for {
 		msg := tMSG{}
-		m, err := getMessage(&msg, 0, 0, 0)
-		if err != nil {
-			log.Println(err)
-			break
-		}
 
-		if !m {
-			break
+		ret, err := getMessageW(&msg, 0, 0, 0)
+		if err != nil {
+			return fmt.Errorf("failed to get message: %v", err)
+		}
+		if !ret {
+			return nil
 		}
 		dispatchMessage(&msg)
-
 	}
 }
